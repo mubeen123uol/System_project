@@ -1,0 +1,23 @@
+# Runtime generated load balancer configuration (built dynamically by deploy.sh from lb/haproxy.cfg.template)
+lb/haproxy.cfg
+
+# Logs and runtime files
+*.log
+*.pid
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE metadata
+.idea/
+.vscode/
+*.swp
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Temporary directories
+tmp/
+temp/

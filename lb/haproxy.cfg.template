@@ -1,0 +1,52 @@
+global
+    log stdout format raw local0 info
+    maxconn 4096
+
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
+    option  redispatch
+    retries 3
+    timeout connect 500ms
+    timeout check   500ms
+    timeout client  50000ms
+    timeout server  50000ms
+
+# Public Edge Entry Point (Unified Multi-Site Access)
+frontend edge_gateway
+    bind :80
+    mode http
+    option forwardfor
+    # Add header tracking routing
+    http-response set-header X-Edge-Gateway "MultiSite-HA-Edge"
+    default_backend multisite_k8s_backend
+
+# Real-time High Availability Monitoring Dashboard
+frontend stats_dashboard
+    bind :8404
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 3s
+    stats show-legends
+    stats show-node
+
+# Multi-Site Resilient Backend Pool
+backend multisite_k8s_backend
+    mode http
+    balance roundrobin
+    option httpchk GET /healthz
+    http-check expect status 200
+
+    # Strict health checks: 1-second interval, 2 fails to mark down, 2 rises to mark up
+    default-server inter 1s fall 2 rise 2
+
+    # Primary Site-A Nodes (Priority Traffic)
+    server site-a-worker1 __SITE_A_NODE1_IP__:30080 check weight 100
+    server site-a-worker2 __SITE_A_NODE2_IP__:30080 check weight 100
+
+    # Disaster Recovery Site-B Nodes (Active Cross-Site Secondary Pool)
+    server site-b-worker1 __SITE_B_NODE1_IP__:30080 check weight 100
+    server site-b-worker2 __SITE_B_NODE2_IP__:30080 check weight 100

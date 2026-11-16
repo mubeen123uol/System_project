@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-app-scripts
+  namespace: ha-platform
+data:
+  server.py: |
+    import http.server
+    import socketserver
+    import os
+    import json
+    import socket
+    import datetime
+
+    PORT = 8080
+    POD_NAME = os.environ.get("POD_NAME", socket.gethostname())
+    NODE_NAME = os.environ.get("NODE_NAME", "unknown-node")
+    POD_IP = os.environ.get("POD_IP", "127.0.0.1")
+    
+    # Map node to Site Data Center
+    if "worker3" in NODE_NAME or "worker4" in NODE_NAME:
+        SITE_ZONE = "site-b (Disaster Recovery)"
+    else:
+        SITE_ZONE = "site-a (Primary DC)"
+
+    class MultiSiteHAHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/healthz" or self.path == "/api/health":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                status = {
+                    "status": "healthy",
+                    "site_zone": SITE_ZONE,
+                    "pod_name": POD_NAME,
+                    "node_name": NODE_NAME,
+                    "pod_ip": POD_IP,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+                self.wfile.write(json.dumps(status, indent=2).encode())
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+
+            # Dynamic styling based on active site
+            is_site_a = "site-a" in SITE_ZONE.lower()
+            badge_color = "#10b981" if is_site_a else "#6366f1"
+            badge_text = "SITE A - PRIMARY DATA CENTER" if is_site_a else "SITE B - DISASTER RECOVERY DATA CENTER"
+
+            html = f"""<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Multi-Site Resilient HA Platform</title>
+                <style>
+                    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; display: flex; justify-content: center; align-items: center; min-height: 90vh; }}
+                    .card {{ background: #1e293b; border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); padding: 2.5rem; max-width: 650px; width: 100%; border: 1px solid #334155; }}
+                    .badge {{ background: {badge_color}; color: white; padding: 0.5rem 1.2rem; border-radius: 9999px; font-weight: 700; font-size: 0.9rem; display: inline-block; letter-spacing: 0.05em; }}
+                    h1 {{ margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.8rem; color: #ffffff; }}
+                    .subtitle {{ color: #94a3b8; margin-bottom: 2rem; font-size: 1rem; }}
+                    .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }}
+                    .stat-box {{ background: #0f172a; padding: 1rem; border-radius: 0.5rem; border: 1px solid #334155; }}
+                    .stat-label {{ font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600; }}
+                    .stat-value {{ font-size: 1.1rem; font-weight: 600; color: #38bdf8; margin-top: 0.25rem; word-break: break-all; }}
+                    .status-indicator {{ display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-weight: 600; font-size: 0.95rem; }}
+                    .dot {{ width: 10px; height: 10px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; }}
+                    @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} 100% {{ opacity: 1; }} }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <span class="badge">{badge_text}</span>
+                    <h1>Multi-Site Resilient HA Platform</h1>
+                    <p class="subtitle">Automated Kubernetes Platform with Cross-Site Failover</p>
+                    
+                    <div class="grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Active Zone</div>
+                            <div class="stat-value">{SITE_ZONE}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Worker Node</div>
+                            <div class="stat-value">{NODE_NAME}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Pod Identifier</div>
+                            <div class="stat-value">{POD_NAME}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Internal Pod IP</div>
+                            <div class="stat-value">{POD_IP}</div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #334155; padding-top: 1.5rem;">
+                        <div class="status-indicator">
+                            <span class="dot"></span>
+                            <span>Site Cluster Health: Operational</span>
+                        </div>
+                        <span style="color: #64748b; font-size: 0.8rem;">HA Topology Enforced</span>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode('utf-8'))
+
+    with socketserver.TCPServer(("", PORT), MultiSiteHAHandler) as httpd:
+        print(f"Serving HA service on port {PORT} for zone {SITE_ZONE}")
+        httpd.serve_forever()

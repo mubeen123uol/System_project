@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ha-platform
+  labels:
+    app.kubernetes.io/part-of: multisite-platform
+    environment: production
